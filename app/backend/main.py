@@ -14,6 +14,10 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AI Hedge Fund API", description="Backend API for AI Hedge Fund", version="0.1.0")
 
+@app.get("/health")
+def health():
+    return {"ok": True}
+
 # Initialize database tables (this is safe to run multiple times)
 Base.metadata.create_all(bind=engine)
 
