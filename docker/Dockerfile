@@ -9,7 +9,9 @@ ENV PYTHONPATH=/app
 RUN pip install poetry==1.7.1
 
 # Copy only dependency files first for better caching
-COPY ../pyproject.toml ../poetry.lock* /app/
+COPY pyproject.toml poetry.lock* /app/
+COPY . /app/
+
 
 # Configure Poetry to not use a virtual environment
 RUN poetry config virtualenvs.create false \
