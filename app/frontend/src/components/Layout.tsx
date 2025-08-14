@@ -20,12 +20,13 @@ function LayoutContent({ children }: { children: ReactNode }) {
   const { openTab, tabs } = useTabsContext(); // ← include tabs
   const { isBottomCollapsed, expandBottomPanel, collapseBottomPanel, toggleBottomPanel } = useLayoutContext();
 
-  const [isLeftCollapsed, setIsLeftCollapsed] = useState(() =>
-    SidebarStorageService.loadLeftSidebarState(false)
-  );
-  const [isRightCollapsed, setIsRightCollapsed] = useState(() =>
-    SidebarStorageService.loadRightSidebarState(false)
-  );
+const [isLeftCollapsed, setIsLeftCollapsed] = useState(() =>
+  SidebarStorageService.loadLeftSidebarState(true)
+);
+const [isRightCollapsed, setIsRightCollapsed] = useState(() =>
+  SidebarStorageService.loadRightSidebarState(true)
+);
+
 
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(280);
   const [rightSidebarWidth, setRightSidebarWidth] = useState(280);
