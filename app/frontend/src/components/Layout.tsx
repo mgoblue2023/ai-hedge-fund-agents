@@ -2,7 +2,8 @@ import { BottomPanel } from '@/components/panels/bottom/bottom-panel';
 import { LeftSidebar } from '@/components/panels/left/left-sidebar';
 import { RightSidebar } from '@/components/panels/right/right-sidebar';
 import { TabBar } from '@/components/tabs/tab-bar';
-import { TabContent } from '@/components/tabs/tab-content';
+// ⬇️ Removed TabContent import
+// import { TabContent } from '@/components/tabs/tab-content';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { FlowProvider, useFlowContext } from '@/contexts/flow-context';
 import { LayoutProvider, useLayoutContext } from '@/contexts/layout-context';
@@ -17,16 +18,21 @@ import { TopBar } from './layout/top-bar';
 
 function LayoutContent({ children }: { children: ReactNode }) {
   const { reactFlowInstance } = useFlowContext();
-  const { openTab, tabs } = useTabsContext(); // ← include tabs
-  const { isBottomCollapsed, expandBottomPanel, collapseBottomPanel, toggleBottomPanel } = useLayoutContext();
+  // ⬇️ No `tabs` here anymore
+  const { openTab } = useTabsContext();
+  const {
+    isBottomCollapsed,
+    expandBottomPanel,
+    collapseBottomPanel,
+    toggleBottomPanel
+  } = useLayoutContext();
 
-const [isLeftCollapsed, setIsLeftCollapsed] = useState(() =>
-  SidebarStorageService.loadLeftSidebarState(true)
-);
-const [isRightCollapsed, setIsRightCollapsed] = useState(() =>
-  SidebarStorageService.loadRightSidebarState(true)
-);
-
+  const [isLeftCollapsed, setIsLeftCollapsed] = useState(() =>
+    SidebarStorageService.loadLeftSidebarState(true)
+  );
+  const [isRightCollapsed, setIsRightCollapsed] = useState(() =>
+    SidebarStorageService.loadRightSidebarState(true)
+  );
 
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(280);
   const [rightSidebarWidth, setRightSidebarWidth] = useState(280);
@@ -76,14 +82,17 @@ const [isRightCollapsed, setIsRightCollapsed] = useState(() =>
         onSettingsClick={handleSettingsClick}
       />
 
-      {/* Tabs */}
-      <div className="absolute top-0 z-10 transition-all duration-200" style={getSidebarBasedStyle()}>
+      {/* Tabs (bar only; no TabContent) */}
+      <div
+        className="absolute top-0 z-10 transition-all duration-200"
+        style={getSidebarBasedStyle()}
+      >
         <TabBar />
       </div>
 
-      {/* Main content area */}
+      {/* Main content area — always your page content */}
       <main
-        className="absolute inset-0 overflow-hidden relative"  // ← make relative
+        className="absolute inset-0 overflow-hidden"
         style={{
           left: !isLeftCollapsed ? `${leftSidebarWidth}px` : '0px',
           right: !isRightCollapsed ? `${rightSidebarWidth}px` : '0px',
@@ -91,20 +100,16 @@ const [isRightCollapsed, setIsRightCollapsed] = useState(() =>
           bottom: !isBottomCollapsed ? `${bottomPanelHeight}px` : '0px',
         }}
       >
-        <TabContent className="h-full w-full" />
-        {/* Show children when there are NO tabs open */}
-        {tabs.length === 0 && (
-          <div className="absolute inset-0">
-            {children}
-          </div>
-        )}
+        <div className="h-full w-full overflow-auto p-4">
+          {children}
+        </div>
       </main>
 
       {/* Left sidebar */}
       <div
         className={cn(
-          "absolute top-0 left-0 z-30 h-full transition-transform",
-          isLeftCollapsed && "transform -translate-x-full opacity-0"
+          'absolute top-0 left-0 z-30 h-full transition-transform',
+          isLeftCollapsed && 'transform -translate-x-full opacity-0'
         )}
       >
         <LeftSidebar
@@ -118,8 +123,8 @@ const [isRightCollapsed, setIsRightCollapsed] = useState(() =>
       {/* Right sidebar */}
       <div
         className={cn(
-          "absolute top-0 right-0 z-30 h-full transition-transform",
-          isRightCollapsed && "transform translate-x-full opacity-0"
+          'absolute top-0 right-0 z-30 h-full transition-transform',
+          isRightCollapsed && 'transform translate-x-full opacity-0'
         )}
       >
         <RightSidebar
@@ -133,8 +138,8 @@ const [isRightCollapsed, setIsRightCollapsed] = useState(() =>
       {/* Bottom panel */}
       <div
         className={cn(
-          "absolute bottom-0 z-20 transition-transform",
-          isBottomCollapsed && "transform translate-y-full opacity-0"
+          'absolute bottom-0 z-20 transition-transform',
+          isBottomCollapsed && 'transform translate-y-full opacity-0'
         )}
         style={getSidebarBasedStyle()}
       >
@@ -169,3 +174,4 @@ export function Layout({ children }: LayoutProps) {
     </SidebarProvider>
   );
 }
+
