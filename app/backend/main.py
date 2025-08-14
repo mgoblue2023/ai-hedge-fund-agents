@@ -26,6 +26,50 @@ def _check_ollama():
 # -----------------------------------------------------------------------------
 app = FastAPI(title="AI Hedge Fund Agents", version="0.1.0")
 
+# --- Minimal API that the UI can call ---
+
+from pydantic import BaseModel
+from typing import List, Dict, Any
+
+# Components list for the right panel (very simple stub)
+@app.get("/api/components")
+def get_components() -> Dict[str, Any]:
+    return {
+        "components": [
+            {
+                "id": "sma-backtest",
+                "name": "SMA Backtest",
+                "description": "Runs a simple moving-average backtest.",
+            },
+            {
+                "id": "echo",
+                "name": "Echo",
+                "description": "Returns whatever you send (debug).",
+            },
+        ]
+    }
+
+# Simple backtest stub so you can see data flow through
+class BacktestRequest(BaseModel):
+    ticker: str = "AAPL"
+    start: str = "2022-01-01"
+    end:   str = "2022-01-31"
+
+class EquityPoint(BaseModel):
+    t: str
+    v: float
+
+class BacktestResponse(BaseModel):
+    ticker: str
+    equity_curve: List[EquityPoint]
+
+@app.post("/api/backtest", response_model=BacktestResponse)
+def backtest(req: BacktestRequest):
+    # Dummy curve (increasing line) – replace with real logic later
+    pts = [EquityPoint(t=f"2022-01-{d:02d}", v=100.0 + d * 0.6) for d in range(1, 31)]
+    return BacktestResponse(ticker=req.ticker, equity_curve=pts)
+
+
 # CORS (open; tighten origins later)
 app.add_middleware(
     CORSMiddleware,
