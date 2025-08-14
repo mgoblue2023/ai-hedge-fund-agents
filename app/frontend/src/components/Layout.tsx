@@ -15,22 +15,26 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { ReactNode, useEffect, useState } from 'react';
 import { TopBar } from './layout/top-bar';
 
-// Create a LayoutContent component to access the FlowContext, TabsContext, and LayoutContext
+// Inner content that can access contexts
 function LayoutContent({ children }: { children: ReactNode }) {
   const { reactFlowInstance } = useFlowContext();
   const { openTab } = useTabsContext();
-  const { isBottomCollapsed, expandBottomPanel, collapseBottomPanel, toggleBottomPanel } = useLayoutContext();
-  
-  // Initialize sidebar states from storage service
-  const [isLeftCollapsed, setIsLeftCollapsed] = useState(() => 
+  const {
+    isBottomCollapsed,
+    expandBottomPanel,
+    collapseBottomPanel,
+    toggleBottomPanel,
+  } = useLayoutContext();
+
+  // Sidebar persisted state
+  const [isLeftCollapsed, setIsLeftCollapsed] = useState(() =>
     SidebarStorageService.loadLeftSidebarState(false)
   );
-  
-  const [isRightCollapsed, setIsRightCollapsed] = useState(() => 
+  const [isRightCollapsed, setIsRightCollapsed] = useState(() =>
     SidebarStorageService.loadRightSidebarState(false)
   );
 
-  // Track actual sidebar widths for dynamic positioning
+  // Live dimensions
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(280);
   const [rightSidebarWidth, setRightSidebarWidth] = useState(280);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(300);
@@ -40,19 +44,18 @@ function LayoutContent({ children }: { children: ReactNode }) {
     openTab(tabData);
   };
 
-  // Add keyboard shortcuts for toggling sidebars and fit view
+  // Keyboard shortcuts
   useLayoutKeyboardShortcuts(
-    () => setIsRightCollapsed(!isRightCollapsed), // Cmd+I for right sidebar
-    () => setIsLeftCollapsed(!isLeftCollapsed),   // Cmd+B for left sidebar
-    () => reactFlowInstance.fitView({ padding: 0.1, duration: 500 }), // Cmd+O for fit view
-    // Note: undo/redo will be handled directly in the Flow component for now
-    undefined, // undo
-    undefined, // redo
-    toggleBottomPanel, // Cmd+J for bottom panel
-    handleSettingsClick, // Shift+Cmd+J for settings
+    () => setIsRightCollapsed(!isRightCollapsed),                           // Cmd+I
+    () => setIsLeftCollapsed(!isLeftCollapsed),                             // Cmd+B
+    () => reactFlowInstance.fitView({ padding: 0.1, duration: 500 }),       // Cmd+O
+    undefined,                                                              // undo (handled elsewhere)
+    undefined,                                                              // redo (handled elsewhere)
+    toggleBottomPanel,                                                      // Cmd+J
+    handleSettingsClick                                                     // Shift+Cmd+J
   );
 
-  // Save sidebar states whenever they change
+  // Persist sidebar state
   useEffect(() => {
     SidebarStorageService.saveLeftSidebarState(isLeftCollapsed);
   }, [isLeftCollapsed]);
@@ -61,48 +64,16 @@ function LayoutContent({ children }: { children: ReactNode }) {
     SidebarStorageService.saveRightSidebarState(isRightCollapsed);
   }, [isRightCollapsed]);
 
-  // Calculate tab bar and bottom panel positioning based on actual sidebar widths
+  // Shared style for elements that sit between the sidebars
   const getSidebarBasedStyle = () => {
-    let left = 0;
-    let right = 0;
-    
-    if (!isLeftCollapsed) {
-      left = leftSidebarWidth;
-    }
-    
-    if (!isRightCollapsed) {
-      right = rightSidebarWidth;
-    }
-    
-    return {
-      left: `${left}px`,
-      right: `${right}px`,
-    };
-  };
-
-  // Calculate main content positioning accounting for tab bar height
-  const getMainContentStyle = () => {
-    const tabBarHeight = 40; // Approximate tab bar height
-    let top = tabBarHeight;
-    let bottom = 0;
-    
-    if (!isBottomCollapsed) {
-      bottom = bottomPanelHeight;
-    }
-    
-    return {
-      top: `${top}px`,
-      bottom: `${bottom}px`,
-      left: '0',
-      right: '0',
-      width: 'auto',
-      height: 'auto',
-    };
+    let left = isLeftCollapsed ? 0 : leftSidebarWidth;
+    let right = isRightCollapsed ? 0 : rightSidebarWidth;
+    return { left: `${left}px`, right: `${right}px` };
   };
 
   return (
     <div className="flex h-screen w-screen overflow-hidden relative bg-background">
-      {/* VSCode-style Top Bar */}
+      {/* VSCode-style top bar */}
       <TopBar
         isLeftCollapsed={isLeftCollapsed}
         isRightCollapsed={isRightCollapsed}
@@ -113,32 +84,35 @@ function LayoutContent({ children }: { children: ReactNode }) {
         onSettingsClick={handleSettingsClick}
       />
 
-      {/* Tab Bar - positioned absolutely like bottom panel */}
-      <div 
-        className="absolute top-0 z-10 transition-all duration-200"
-        style={getSidebarBasedStyle()}
-      >
+      {/* Tab bar */}
+      <div className="absolute top-0 z-10 transition-all duration-200" style={getSidebarBasedStyle()}>
         <TabBar />
       </div>
 
-      {/* Main content area */}
-      <main 
-        className="absolute inset-0 overflow-hidden" 
+      {/* Main content area — RENDERS CHILDREN HERE */}
+      <main
+        className="absolute inset-0 overflow-hidden"
         style={{
-          left: !isLeftCollapsed ? `${leftSidebarWidth}px` : '0px',
-          right: !isRightCollapsed ? `${rightSidebarWidth}px` : '0px',
-          top: '40px', // Tab bar height
-          bottom: !isBottomCollapsed ? `${bottomPanelHeight}px` : '0px',
+          left: isLeftCollapsed ? '0px' : `${leftSidebarWidth}px`,
+          right: isRightCollapsed ? '0px' : `${rightSidebarWidth}px`,
+          top: '40px', // tab bar height
+          bottom: isBottomCollapsed ? '0px' : `${bottomPanelHeight}px`,
         }}
       >
-        <TabContent className="h-full w-full" />
+        <div className="relative h-full w-full">
+          <TabContent className="h-full w-full" />
+          {/* Your page-level content (e.g., BacktestDemo) */}
+          {children}
+        </div>
       </main>
 
       {/* Floating left sidebar */}
-      <div className={cn(
-        "absolute top-0 left-0 z-30 h-full transition-transform",
-        isLeftCollapsed && "transform -translate-x-full opacity-0"
-      )}>
+      <div
+        className={cn(
+          'absolute top-0 left-0 z-30 h-full transition-transform',
+          isLeftCollapsed && 'transform -translate-x-full opacity-0'
+        )}
+      >
         <LeftSidebar
           isCollapsed={isLeftCollapsed}
           onCollapse={() => setIsLeftCollapsed(true)}
@@ -148,10 +122,12 @@ function LayoutContent({ children }: { children: ReactNode }) {
       </div>
 
       {/* Floating right sidebar */}
-      <div className={cn(
-        "absolute top-0 right-0 z-30 h-full transition-transform",
-        isRightCollapsed && "transform translate-x-full opacity-0"
-      )}>
+      <div
+        className={cn(
+          'absolute top-0 right-0 z-30 h-full transition-transform',
+          isRightCollapsed && 'transform translate-x-full opacity-0'
+        )}
+      >
         <RightSidebar
           isCollapsed={isRightCollapsed}
           onCollapse={() => setIsRightCollapsed(true)}
@@ -161,10 +137,10 @@ function LayoutContent({ children }: { children: ReactNode }) {
       </div>
 
       {/* Bottom panel */}
-      <div 
+      <div
         className={cn(
-          "absolute bottom-0 z-20 transition-transform",
-          isBottomCollapsed && "transform translate-y-full opacity-0"
+          'absolute bottom-0 z-20 transition-transform',
+          isBottomCollapsed && 'transform translate-y-full opacity-0'
         )}
         style={getSidebarBasedStyle()}
       >
@@ -184,7 +160,7 @@ interface LayoutProps {
   children: ReactNode;
 }
 
-export function Layout({ children }: LayoutProps) {
+export default function Layout({ children }: LayoutProps) {
   return (
     <SidebarProvider defaultOpen={true}>
       <ReactFlowProvider>
