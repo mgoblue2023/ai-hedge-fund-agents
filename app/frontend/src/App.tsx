@@ -1,5 +1,5 @@
 // src/App.tsx
-import Layout from './components/Layout';
+import { Layout } from './components/Layout';  // <-- named import
 import { Toaster } from './components/ui/sonner';
 import BacktestDemo from './components/BacktestDemo';
 
