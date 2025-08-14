@@ -12,7 +12,7 @@ type BacktestResponse = {
 const API =
   (import.meta as any)?.env?.VITE_API_BASE ||
   (window as any).VITE_API_BASE ||
-  'https://ai-hedge-fund-agents-1.onrender.com'; // fallback; replace if your URL is different
+  'https://ai-hedge-fund-agents-1.onrender.com'; // fallback; replace if different
 
 export default function BacktestDemo() {
   const [ticker, setTicker] = useState('AAPL');
@@ -55,7 +55,61 @@ export default function BacktestDemo() {
     }
   }
 
-  // --- SVG chart (no dependencies) ---
+  // --- Stats from equity + trades ---
+  const stats = useMemo(() => {
+    const eq = data?.equity_curve ?? [];
+    if (eq.length < 2) return null;
+
+    const startV = eq[0].v;
+    const endV = eq[eq.length - 1].v;
+    const totalReturn = (endV / startV - 1) * 100;
+
+    // Max drawdown
+    let peak = -Infinity;
+    let maxDD = 0;
+    for (const p of eq) {
+      if (p.v > peak) peak = p.v;
+      if (peak > 0) {
+        const dd = (peak - p.v) / peak;
+        if (dd > maxDD) maxDD = dd;
+      }
+    }
+    const maxDrawdownPct = maxDD * 100;
+
+    // Win rate over round trips (BUY -> SELL)
+    const trades = data?.trades ?? [];
+    let wins = 0;
+    let losses = 0;
+    for (let i = 0; i < trades.length; i++) {
+      const buy = trades[i];
+      if (buy.side !== 'BUY') continue;
+      let j = i + 1;
+      while (j < trades.length && trades[j].side !== 'SELL') j++;
+      if (j < trades.length) {
+        const sell = trades[j];
+        const qty = Math.min(buy.qty, sell.qty); // be safe
+        const pnl = (sell.price - buy.price) * qty - (buy.fee + sell.fee);
+        if (pnl > 0) wins++; else losses++;
+        i = j; // skip ahead to after the SELL
+      } else {
+        break;
+      }
+    }
+    const roundTrips = wins + losses;
+    const winRate = roundTrips > 0 ? (wins / roundTrips) * 100 : 0;
+
+    return {
+      startV,
+      endV,
+      totalReturn,
+      maxDrawdownPct,
+      tradesCount: trades.length,
+      roundTrips,
+      winRate,
+    };
+  }, [data]);
+
+  // --- SVG line path for equity ---
   const chart = useMemo(() => {
     const points = data?.equity_curve || [];
     const W = 800, H = 300, PAD = 30;
@@ -134,6 +188,18 @@ export default function BacktestDemo() {
 
       {error && <div className="text-red-400 mb-3 text-sm">{error}</div>}
 
+      {/* Stats */}
+      {data && stats && (
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4">
+          <Stat label="Start Equity" value={`$${stats.startV.toFixed(2)}`} />
+          <Stat label="End Equity" value={`$${stats.endV.toFixed(2)}`} />
+          <Stat label="Total Return" value={`${stats.totalReturn.toFixed(2)}%`} />
+          <Stat label="Max Drawdown" value={`${stats.maxDrawdownPct.toFixed(2)}%`} />
+          <Stat label="# Trades" value={`${stats.tradesCount}`} />
+          <Stat label="Win Rate" value={`${stats.winRate.toFixed(1)}% (${stats.roundTrips} rt)`} />
+        </div>
+      )}
+
       {/* Chart */}
       {data?.equity_curve?.length ? (
         <div className="rounded border border-white/10 p-3 mb-4 bg-black/30">
@@ -174,6 +240,15 @@ export default function BacktestDemo() {
           </table>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded border border-white/10 bg-black/30 p-3">
+      <div className="text-xs opacity-70">{label}</div>
+      <div className="text-lg font-semibold">{value}</div>
     </div>
   );
 }
