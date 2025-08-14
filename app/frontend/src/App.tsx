@@ -1,12 +1,10 @@
-// app/frontend/src/App.tsx
-import { Layout } from './components/Layout'; // NOTE: capital "L" in Layout
-import { Toaster } from './components/ui/sonner';
+import { Layout } from './components/Layout';
+import BacktestDemo from './components/BacktestDemo';
 
 export default function App() {
   return (
     <Layout>
-      <Toaster />
+      <BacktestDemo />
     </Layout>
   );
 }
-
