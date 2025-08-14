@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Chart } from 'chart.js/auto';
+import { apiUrl } from '@/lib/api';
 
 type EquityPoint = { t: string; v: number };
 type Trade = { date: string; side: 'BUY' | 'SELL'; qty: number; price: number; fee: number };
@@ -8,11 +10,6 @@ type BacktestResponse = {
   equity_curve: EquityPoint[];
   trades: Trade[];
 };
-
-const API =
-  (import.meta as any)?.env?.VITE_API_BASE ||
-  (window as any).VITE_API_BASE ||
-  'https://ai-hedge-fund-agents-1.onrender.com'; // fallback; replace if different
 
 export default function BacktestDemo() {
   const [ticker, setTicker] = useState('AAPL');
@@ -40,7 +37,7 @@ export default function BacktestDemo() {
       if (start) body.start = start;
       if (end) body.end = end;
 
-      const r = await fetch(`${API}/api/backtest`, {
+      const r = await fetch(apiUrl('/api/backtest'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -78,8 +75,7 @@ export default function BacktestDemo() {
 
     // Win rate over round trips (BUY -> SELL)
     const trades = data?.trades ?? [];
-    let wins = 0;
-    let losses = 0;
+    let wins = 0, losses = 0;
     for (let i = 0; i < trades.length; i++) {
       const buy = trades[i];
       if (buy.side !== 'BUY') continue;
@@ -87,94 +83,52 @@ export default function BacktestDemo() {
       while (j < trades.length && trades[j].side !== 'SELL') j++;
       if (j < trades.length) {
         const sell = trades[j];
-        const qty = Math.min(buy.qty, sell.qty); // be safe
+        const qty = Math.min(buy.qty, sell.qty);
         const pnl = (sell.price - buy.price) * qty - (buy.fee + sell.fee);
         if (pnl > 0) wins++; else losses++;
-        i = j; // skip ahead to after the SELL
-      } else {
-        break;
-      }
+        i = j;
+      } else break;
     }
     const roundTrips = wins + losses;
     const winRate = roundTrips > 0 ? (wins / roundTrips) * 100 : 0;
 
-    return {
-      startV,
-      endV,
-      totalReturn,
-      maxDrawdownPct,
-      tradesCount: trades.length,
-      roundTrips,
-      winRate,
-    };
-  }, [data]);
-
-  // --- SVG line path for equity ---
-  const chart = useMemo(() => {
-    const points = data?.equity_curve || [];
-    const W = 800, H = 300, PAD = 30;
-    if (points.length < 2) return { d: '', W, H, min: 0, max: 0, last: 0 };
-
-    const vals = points.map(p => p.v);
-    const min = Math.min(...vals);
-    const max = Math.max(...vals);
-    const last = vals[vals.length - 1];
-    const range = max - min || 1;
-    const stepX = (W - PAD * 2) / (points.length - 1);
-
-    const d = points
-      .map((p, i) => {
-        const x = PAD + i * stepX;
-        const y = PAD + (H - PAD * 2) * (1 - (p.v - min) / range);
-        return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
-      })
-      .join(' ');
-
-    return { d, W, H, min, max, last };
+    return { startV, endV, totalReturn, maxDrawdownPct, tradesCount: trades.length, roundTrips, winRate };
   }, [data]);
 
   return (
-    <div className="p-4 max-w-[1000px] mx-auto">
-      <div className="mb-4 text-xl font-semibold">Backtest Demo (SMA crossover)</div>
+    <div className="mx-auto max-w-5xl p-4 space-y-4">
+      <div className="text-xl font-semibold">Backtest Demo (SMA crossover)</div>
 
       {/* Controls */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <label className="flex flex-col text-sm">
-          <span>Ticker</span>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Field label="Ticker">
           <input className="px-3 py-2 rounded bg-black/40 border border-white/10"
-                 value={ticker} onChange={e=>setTicker(e.target.value.toUpperCase())} />
-        </label>
-        <label className="flex flex-col text-sm">
-          <span>Start (YYYY-MM-DD)</span>
+                 value={ticker} onChange={e=>setTicker(e.target.value.toUpperCase())}/>
+        </Field>
+        <Field label="Start (YYYY-MM-DD)">
           <input className="px-3 py-2 rounded bg-black/40 border border-white/10"
-                 placeholder="optional" value={start} onChange={e=>setStart(e.target.value)} />
-        </label>
-        <label className="flex flex-col text-sm">
-          <span>End (YYYY-MM-DD)</span>
+                 placeholder="optional" value={start} onChange={e=>setStart(e.target.value)}/>
+        </Field>
+        <Field label="End (YYYY-MM-DD)">
           <input className="px-3 py-2 rounded bg-black/40 border border-white/10"
-                 placeholder="optional" value={end} onChange={e=>setEnd(e.target.value)} />
-        </label>
-        <label className="flex flex-col text-sm">
-          <span>Short Window</span>
+                 placeholder="optional" value={end} onChange={e=>setEnd(e.target.value)}/>
+        </Field>
+        <Field label="Short Window">
           <input type="number" className="px-3 py-2 rounded bg-black/40 border border-white/10"
-                 value={shortWin} onChange={e=>setShortWin(parseInt(e.target.value||'0'))} />
-        </label>
-        <label className="flex flex-col text-sm">
-          <span>Long Window</span>
+                 value={shortWin} onChange={e=>setShortWin(parseInt(e.target.value || '0'))}/>
+        </Field>
+        <Field label="Long Window">
           <input type="number" className="px-3 py-2 rounded bg-black/40 border border-white/10"
-                 value={longWin} onChange={e=>setLongWin(parseInt(e.target.value||'0'))} />
-        </label>
-        <label className="flex flex-col text-sm">
-          <span>Fee (bps)</span>
+                 value={longWin} onChange={e=>setLongWin(parseInt(e.target.value || '0'))}/>
+        </Field>
+        <Field label="Fee (bps)">
           <input type="number" className="px-3 py-2 rounded bg-black/40 border border-white/10"
-                 value={feeBps} onChange={e=>setFeeBps(parseFloat(e.target.value||'0'))} />
-        </label>
-        <label className="flex flex-col text-sm">
-          <span>Slippage (bps)</span>
+                 value={feeBps} onChange={e=>setFeeBps(parseFloat(e.target.value || '0'))}/>
+        </Field>
+        <Field label="Slippage (bps)">
           <input type="number" className="px-3 py-2 rounded bg-black/40 border border-white/10"
-                 value={slipBps} onChange={e=>setSlipBps(parseFloat(e.target.value||'0'))} />
-        </label>
-
+                 value={slipBps} onChange={e=>setSlipBps(parseFloat(e.target.value || '0'))}/>
+        </Field>
         <div className="flex items-end">
           <button
             onClick={run}
@@ -186,11 +140,11 @@ export default function BacktestDemo() {
         </div>
       </div>
 
-      {error && <div className="text-red-400 mb-3 text-sm">{error}</div>}
+      {error && <div className="text-red-400 text-sm">{error}</div>}
 
       {/* Stats */}
       {data && stats && (
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
           <Stat label="Start Equity" value={`$${stats.startV.toFixed(2)}`} />
           <Stat label="End Equity" value={`$${stats.endV.toFixed(2)}`} />
           <Stat label="Total Return" value={`${stats.totalReturn.toFixed(2)}%`} />
@@ -200,20 +154,14 @@ export default function BacktestDemo() {
         </div>
       )}
 
-      {/* Chart */}
+      {/* Chart.js line chart */}
       {data?.equity_curve?.length ? (
-        <div className="rounded border border-white/10 p-3 mb-4 bg-black/30">
-          <div className="text-sm opacity-80 mb-2">
-            {data.ticker} — last equity: {chart.last.toFixed(2)} (min {chart.min.toFixed(2)} / max {chart.max.toFixed(2)})
-          </div>
-          <svg width={chart.W} height={chart.H} className="w-full h-auto">
-            <rect x="0" y="0" width={chart.W} height={chart.H} fill="transparent" />
-            <path d={chart.d} fill="none" stroke="white" strokeWidth="2" />
-          </svg>
+        <div className="rounded border border-white/10 p-3 bg-black/30">
+          <EquityChart points={data.equity_curve} label={`${data.ticker} Equity`} />
         </div>
       ) : null}
 
-      {/* Trades */}
+      {/* Trades table */}
       {data?.trades?.length ? (
         <div className="rounded border border-white/10 overflow-x-auto bg-black/30">
           <table className="w-full text-sm">
@@ -244,6 +192,15 @@ export default function BacktestDemo() {
   );
 }
 
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="flex flex-col text-sm">
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
+
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded border border-white/10 bg-black/30 p-3">
@@ -251,4 +208,46 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="text-lg font-semibold">{value}</div>
     </div>
   );
+}
+
+function EquityChart({ points, label }: { points: EquityPoint[]; label: string }) {
+  const ref = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    if (!ref.current || points.length < 2) return;
+    const ctx = ref.current.getContext('2d');
+    if (!ctx) return;
+
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: points.map(p => p.t),
+        datasets: [
+          {
+            label,
+            data: points.map(p => p.v),
+            borderWidth: 2,
+            pointRadius: 0,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        animation: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { display: false },
+          y: {
+            ticks: {
+              callback: (v) => `$${Number(v).toFixed(0)}`
+            }
+          }
+        },
+      },
+    });
+
+    return () => chart.destroy();
+  }, [points, label]);
+
+  return <canvas ref={ref} className="w-full h-56" />;
 }
