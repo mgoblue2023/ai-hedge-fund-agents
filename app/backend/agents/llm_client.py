@@ -1,4 +1,5 @@
 # app/backend/agents/llm_client.py
+print("llm_client: loaded (robust extractor)")
 import os
 import httpx
 from typing import Optional, Dict, Any
