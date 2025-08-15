@@ -1,10 +1,12 @@
 # app/backend/main.py
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import os
 import logging
+import pkgutil
+import importlib
 
 app = FastAPI(title="AI Hedge Fund Agents", version="0.1.0")
 
@@ -26,7 +28,8 @@ def health():
 
 @app.get("/")
 def root():
-    return {"service": "ai-hedge-fund-agents", "ok": True}
+    # Visit /web for the simple UI
+    return {"service": "ai-hedge-fund-agents", "ok": True, "ui": "/web"}
 
 # --- Try to include your existing routers (agents/web) ---
 try:
@@ -45,6 +48,7 @@ try:
     from app.backend.routers import web as web_router
     app.include_router(web_router.router)
 except Exception as e:
+    # Optional; many repos won't have this
     logging.warning(f"Web router not loaded: {e}")
 
 # ======================= DEBUG ROUTES =======================
@@ -83,13 +87,11 @@ else:
                     "LLM_PROVIDER": os.getenv("LLM_PROVIDER", "openai"),
                     "OPENAI_BASE_URL": os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
                     "LLM_MODEL_default": os.getenv("LLM_MODEL", "gpt-4o-mini"),
-                    "hint": "401=bad key, 404=model not allowed, 429=quota. You can set LLM_MOCK=1 to develop without API.",
+                    "hint": "401=bad key, 404=model not allowed, 429=quota. Use LLM_MOCK=1 to develop without API.",
                 },
             )
 
 # --- /debug/agents-available (scan modules under app/backend/agents) ---
-import pkgutil, importlib
-
 @_debug.get("/agents-available")
 def debug_agents_available():
     try:
@@ -112,7 +114,7 @@ def debug_agents_available():
 
 # --- /debug/agents-registry (try to show the actual keys your endpoint uses) ---
 def _find_registry_keys():
-    # We’ll check a few likely places for a dict like AGENT_IMPLS / AGENT_MAP / AGENTS
+    # Check likely modules for a dict like AGENT_IMPLS / AGENT_MAP / AGENTS
     candidates = [
         "app.backend.routers.agents",
         "app.backend.agents.router",
@@ -130,8 +132,7 @@ def _find_registry_keys():
         for varname in possible_names:
             val = getattr(mod, varname, None)
             if isinstance(val, dict) and val:
-                keys = list(val.keys())
-                results.append({"module": modpath, "variable": varname, "keys": keys})
+                results.append({"module": modpath, "variable": varname, "keys": list(val.keys())})
     return results
 
 @_debug.get("/agents-registry")
@@ -148,3 +149,7 @@ def debug_agents_registry():
 
 app.include_router(_debug)
 # ===================== END DEBUG ROUTES =====================
+
+# --- Static UI at /web ---
+# Put your HTML at repo-root/web/index.html (see instructions)
+app.mount("/web", StaticFiles(directory="web", html=True), name="web")
