@@ -97,3 +97,26 @@ else:
 
     app.include_router(_debug)
 # ---------- END DEBUG LLM PING ----------
+
+# ---------- DEBUG: list available agent modules ----------
+import pkgutil, importlib, types
+import app.backend.agents as agents_pkg
+
+@_debug.get("/agents-available")
+def debug_agents_available():
+    """
+    Lists Python modules under app/backend/agents. Often these map to the agent keys
+    your /agents/signal endpoint expects (e.g., 'value', 'quality', 'ta', etc.).
+    """
+    names = []
+    try:
+        for m in pkgutil.iter_modules(agents_pkg.__path__):
+            name = m.name
+            if name.startswith("_") or name in ("llm_client", "llm_helpers", "generic", "router"):
+                continue
+            names.append(name)
+    except Exception as e:
+        names.append(f"(error scanning agents package: {e})")
+    return {"agents_by_module": sorted(names)}
+# ---------- END DEBUG ----------
+
