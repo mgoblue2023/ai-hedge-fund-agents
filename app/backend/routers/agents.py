@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-import os, re, logging, asyncio, pkgutil, importlib
+import os, re, logging, asyncio, pkgutil, importlib, statistics
 
 from app.backend.agents.llm_client import chat as llm_chat
 
@@ -45,16 +45,31 @@ def _parse_action(text: str) -> str:
             return kw
     return "hold"
 
+def _parse_confidence(text: str) -> Optional[float]:
+    """
+    Extracts 'Confidence: 0.0–1.0' (or 0–100) from the agent's text.
+    """
+    if not text:
+        return None
+    m = re.search(r'confidence\s*:\s*([0-9]+(?:\.[0-9]+)?)', text, re.I)
+    if not m:
+        return None
+    v = float(m.group(1))
+    if v > 1.0:  # allow percent-style
+        v = v / 100.0
+    return max(0.0, min(1.0, v))
+
 def _persona_prompt(persona: str, ticker: str, req: SignalRequest) -> str:
     risk = (req.risk or "").lower()
     note = (req.context or {}).get("note", "")
     return (
         f"You are the {persona} agent.\n"
-        f"Analyze {ticker} for a 1–3 month swing trade given risk={risk}, budget=${req.budget}.\n"
-        f"{'Note: ' + note if note else ''}\n"
-        f"Give 2–4 concise sentences of rationale.\n"
-        f"Then end with a line exactly like:\n"
-        f"Final action: buy|sell|hold"
+        f"Analyze {ticker} for a 1–3 month swing trade given risk={risk}, budget=${req.budget}."
+        f"{' Note: ' + note if note else ''}\n"
+        f"Write 2–4 concise sentences of rationale.\n"
+        f"Then end with TWO lines exactly:\n"
+        f"Final action: buy|sell|hold\n"
+        f"Confidence: <a number between 0.0 and 1.0>\n"
     )
 
 def persona_agent(persona: str):
@@ -62,7 +77,11 @@ def persona_agent(persona: str):
         txt = await llm_chat(_persona_prompt(persona, ticker, req), model=req.llm_model)
         txt = (txt or "").strip()
         action = _parse_action(txt)
-        return {"agent": persona.lower(), "action": action, "confidence": 0.0, "rationale": txt}
+        conf = _parse_confidence(txt)
+        if conf is None:
+            # Fallback heuristic: any directional call gets a bit higher confidence than hold
+            conf = 0.65 if action in ("buy", "sell") else 0.55
+        return {"agent": persona.lower(), "action": action, "confidence": float(conf), "rationale": txt}
     return run
 
 # ----------------------- Agent registry -----------------------
@@ -116,16 +135,29 @@ async def _run_one_agent(agent_name: str, ticker: str, req: SignalRequest) -> Di
                 return await impl(ticker=ticker, model=req.llm_model, risk=req.risk, budget=req.budget, context=req.context)
             return impl(ticker=ticker, model=req.llm_model, risk=req.risk, budget=req.budget, context=req.context)
         except Exception as e:
-            return {"agent": agent_name, "action": "hold", "confidence": 0.0, "rationale": f"Agent error: {e}"}
+            return {"agent": agent_name, "action": "hold", "confidence": 0.5, "rationale": f"Agent error: {e}"}
 
 def _final_vote(decisions: List[Dict[str, Any]]) -> Dict[str, Any]:
-    # simple average of mapped actions
+    # average mapped actions to a score in [-1, 1]
     score = 0.0
     for d in decisions:
         score += VAL.get(d.get("action"), 0)
     score /= max(1, len(decisions))
+
+    # consensus decision
     final_vote = "buy" if score > 0.15 else "sell" if score < -0.15 else "hold"
-    return {"final_vote": final_vote, "final_score": round(score, 3)}
+
+    # combine agent confidences + agreement strength into a final_confidence
+    confs = [float(d.get("confidence", 0.5)) for d in decisions if d.get("confidence") is not None]
+    avg_conf = statistics.mean(confs) if confs else 0.55
+    agreement = abs(score)  # 0..1
+    final_confidence = max(0.05, min(0.95, 0.5 * avg_conf + 0.5 * agreement))
+
+    return {
+        "final_vote": final_vote,
+        "final_score": round(score, 3),
+        "final_confidence": round(final_confidence, 2),
+    }
 
 # ----------------------- Routes -----------------------
 @router.post("/signal")
@@ -146,11 +178,11 @@ async def signal(req: SignalRequest) -> Dict[str, Any]:
                 res = {
                     "agent": res.get("agent", a),
                     "action": res.get("action", "hold"),
-                    "confidence": float(res.get("confidence", 0.0)),
+                    "confidence": float(res.get("confidence", 0.55)),
                     "rationale": res.get("rationale", ""),
                 }
             except Exception as e:
-                res = {"agent": a, "action": "hold", "confidence": 0.0, "rationale": f"Agent runtime error: {e}"}
+                res = {"agent": a, "action": "hold", "confidence": 0.55, "rationale": f"Agent runtime error: {e}"}
             decisions.append(res)
 
         fv = _final_vote(decisions)
