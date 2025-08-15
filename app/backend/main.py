@@ -4,6 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Tuple, Optional
+from app.backend.routers import agents as agents_router
+app.include_router(agents_router.router)
+
 import requests, csv, io
 
 app = FastAPI(title="AI Hedge Fund Agents", version="0.1.0")
