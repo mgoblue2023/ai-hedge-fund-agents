@@ -45,7 +45,8 @@ def _mock_reply(prompt: str) -> str:
     return (
         "Rationale: Mock analysis indicating neutral outlook over 1–3 months. "
         "Valuation and momentum do not suggest a strong edge.\n"
-        "Final action: hold"
+        "Final action: hold\n"
+        "Confidence: 0.55\n"
     )
 
 async def chat(prompt: str, model: Optional[str] = None, temperature: float = 0.2, timeout_s: float = 30.0) -> str:
