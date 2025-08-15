@@ -1,5 +1,5 @@
 # app/backend/main.py
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import logging
@@ -27,10 +27,35 @@ def health():
 def root():
     return {"service": "ai-hedge-fund-agents", "ok": True}
 
-# --- Routers (load after app exists!) ---
+# --- Include routers if present (agents, web). Health is already defined above. ---
+# Try routers in app.backend.routers.*
 try:
-    # If your router lives at app/backend/agents/router.py with "router = APIRouter(prefix='/agents')"
-    from .agents import router as agents_router  # relative import because we run as app.backend.main
-    app.include_router(agents_router.router)     # don't add prefix again if it's in the file
+    from app.backend.routers import agents as agents_router
+    app.include_router(agents_router.router)
+except Exception as e1:
+    # Fallback: some repos put agents router at app.backend.agents.router:router
+    try:
+        from app.backend.agents import router as agents_router2
+        app.include_router(agents_router2.router)
+    except Exception as e2:
+        logging.warning(f"Agents router not loaded: {e1} | fallback: {e2}")
+
+# Optional web/static router if your project has one
+try:
+    from app.backend.routers import web as web_router
+    app.include_router(web_router.router)
 except Exception as e:
-    logging.warning(f"Agents router not loaded: {e}")
+    logging.warning(f"Web router not loaded: {e}")
+
+# ---------- DEBUG LLM PING (inline drop-in) ----------
+from app.backend.agents.llm_client import chat as llm_chat
+
+_debug = APIRouter(prefix="/debug", tags=["debug"])
+
+@_debug.get("/llm-ping")
+async def llm_ping(model: str | None = None):
+    txt = await llm_chat("Reply with exactly: PONG", model=model)
+    return {"ok": True, "model": model, "text": txt}
+
+app.include_router(_debug)
+# ---------- END DEBUG LLM PING ----------
