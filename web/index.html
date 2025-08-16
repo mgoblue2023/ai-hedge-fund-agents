@@ -2,171 +2,198 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>AI Hedge Fund – Quick UI</title>
-  <style>
-    body { font-family: system-ui, Arial, sans-serif; margin: 20px; }
-    .card { border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin: 12px 0; }
-    label { font-size: 12px; opacity: .8; }
-    input, select, button { padding: 8px; margin-top: 4px; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background: #f8f8f8; }
-    .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>AI Hedge Fund — Demo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 </head>
-<body>
-  <h1>AI Hedge Fund – Quick UI</h1>
+<body class="bg-slate-50 text-slate-900">
+  <header class="bg-gradient-to-r from-indigo-600 to-violet-600 text-white">
+    <div class="max-w-6xl mx-auto px-4 py-6">
+      <h1 class="text-2xl font-semibold">AI Hedge Fund — Demo</h1>
+      <p class="opacity-90">AI consensus + quick SMA backtest (for learning)</p>
+    </div>
+  </header>
 
-  <div class="card">
-    <div class="row">
-      <div>
-        <label for="tickers">Tickers (comma-separated)</label><br/>
-        <input id="tickers" placeholder="AAPL, MSFT, NVDA" style="min-width:260px"/>
+  <main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+    <!-- Controls -->
+    <section class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+      <div class="grid gap-4 md:grid-cols-6">
+        <label class="text-sm col-span-2">Tickers (comma-separated)
+          <input id="tickers" class="mt-1 w-full border rounded-lg px-3 py-2" placeholder="AAPL, MSFT, NVDA">
+        </label>
+        <label class="text-sm">Budget ($)
+          <input id="budget" type="number" value="10000" min="0" step="100" class="mt-1 w-full border rounded-lg px-3 py-2">
+        </label>
+        <label class="text-sm">Risk
+          <select id="risk" class="mt-1 w-full border rounded-lg px-3 py-2">
+            <option>low</option><option selected>medium</option><option>high</option>
+          </select>
+        </label>
+        <label class="text-sm col-span-2">Agents
+          <select id="agents" multiple size="3" class="mt-1 w-full border rounded-lg px-3 py-2"></select>
+          <span class="text-xs text-slate-500">Ctrl/Cmd-click to multi-select</span>
+        </label>
       </div>
-      <div>
-        <label for="budget">Budget ($)</label><br/>
-        <input id="budget" type="number" value="10000" min="0" step="100"/>
-      </div>
-      <div>
-        <label for="risk">Risk</label><br/>
-        <select id="risk">
-          <option>low</option>
-          <option selected>medium</option>
-          <option>high</option>
+
+      <div class="flex flex-wrap gap-3 mt-4">
+        <button id="btnConsensus" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-4 py-2">Get AI Consensus</button>
+        <button id="btnBacktest" class="bg-slate-900 hover:bg-black text-white rounded-xl px-4 py-2">Run SMA Backtest</button>
+        <select id="range" class="border rounded-lg px-3 py-2">
+          <option value="6mo">6mo</option>
+          <option value="1y" selected>1y</option>
+          <option value="2y">2y</option>
+          <option value="5y">5y</option>
         </select>
+        <label class="text-sm">Fast
+          <input id="fast" type="number" value="20" class="ml-2 w-20 border rounded-lg px-2 py-1">
+        </label>
+        <label class="text-sm">Slow
+          <input id="slow" type="number" value="50" class="ml-2 w-20 border rounded-lg px-2 py-1">
+        </label>
       </div>
-      <div>
-        <label for="agents">Agents (Ctrl/Cmd-click to multi-select)</label><br/>
-        <select id="agents" multiple size="4" style="min-width:180px;"></select>
-      </div>
-      <div>
-        <label for="llm_model">LLM model</label><br/>
-        <input id="llm_model" value="gpt-4o-mini"/>
-      </div>
-      <div>
-        <button id="run">Get Consensus</button>
-      </div>
-    </div>
-  </div>
+      <div id="status" class="text-sm text-slate-600 mt-2"></div>
+    </section>
 
-  <div id="status"></div>
+    <!-- Consensus results -->
+    <section class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+      <h2 class="text-lg font-semibold mb-2">AI Consensus</h2>
+      <div class="overflow-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-100">
+            <tr><th class="p-2 text-left">Ticker</th><th class="p-2">Decision</th><th class="p-2">Score</th><th class="p-2">Confidence</th><th class="p-2 text-left">Rationales</th></tr>
+          </thead>
+          <tbody id="consensusBody"></tbody>
+        </table>
+      </div>
+    </section>
 
-  <div class="card" id="results" style="display:none;">
-    <h3>Results</h3>
-    <div style="overflow:auto;">
-      <table>
-        <thead>
-          <tr>
-            <th>Ticker</th>
-            <th>Decision</th>
-            <th>Score</th>
-            <th>Rationales (per agent)</th>
-          </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
-    </div>
-  </div>
+    <!-- Chart + backtest -->
+    <section class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="text-lg font-semibold">Price & Backtest (SMA demo)</h2>
+        <div class="text-sm text-slate-600" id="btSummary"></div>
+      </div>
+      <div class="grid md:grid-cols-3 gap-4">
+        <div id="priceChart" class="h-72 col-span-2"></div>
+        <div id="equityChart" class="h-72"></div>
+      </div>
+      <div class="mt-3">
+        <h3 class="font-semibold mb-1">Trades</h3>
+        <div class="overflow-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100">
+              <tr><th class="p-2 text-left">Time</th><th class="p-2">Side</th><th class="p-2">Price</th><th class="p-2">Shares</th></tr>
+            </thead>
+            <tbody id="tradesBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
 
 <script>
-(async function init() {
-  const status = (msg) => document.getElementById('status').textContent = msg || '';
-  const agentsSel = document.getElementById('agents');
+const $ = (id)=>document.getElementById(id);
+const statusEl = $("status");
+const agentsSel = $("agents");
 
-  // Load agent keys your server accepts
-  async function loadAgents() {
-    // Try registry (actual keys used by the endpoint)
-    let keys = [];
-    try {
-      const r = await fetch('/debug/agents-registry');
-      const j = await r.json();
-      if (j.ok && Array.isArray(j.found) && j.found.length > 0) {
-        // collect unique keys from all registries found
-        const set = new Set();
-        j.found.forEach(item => (item.keys || []).forEach(k => set.add(k)));
-        keys = Array.from(set);
-      }
-    } catch {}
-
-    // Fallback to module scan
-    if (!keys.length) {
-      try {
-        const r = await fetch('/debug/agents-available');
-        const j = await r.json();
-        if (j.ok && Array.isArray(j.agents_by_module)) keys = j.agents_by_module;
-      } catch {}
+// Load server-known agents
+async function loadAgents(){
+  let keys=[];
+  try{
+    const r = await fetch('/debug/agents-registry'); const j = await r.json();
+    if(j.ok && Array.isArray(j.found)){
+      const set = new Set(); j.found.forEach(x => (x.keys||[]).forEach(k=>set.add(k)));
+      keys = Array.from(set);
     }
-
-    // Final fallback to our built-ins from router override
-    if (!keys.length) keys = ["buffett","munger","technicals"];
-
-    // Populate select
-    agentsSel.innerHTML = '';
-    keys.forEach(k => {
-      const opt = document.createElement('option');
-      opt.value = k; opt.textContent = k;
-      opt.selected = true; // preselect all
-      agentsSel.appendChild(opt);
-    });
+  }catch{}
+  if(!keys.length){
+    const r = await fetch('/debug/agents-available'); const j = await r.json();
+    if(j.ok && Array.isArray(j.agents_by_module)) keys=j.agents_by_module;
   }
+  if(!keys.length) keys=["buffett","munger","technicals"];
+  agentsSel.innerHTML='';
+  keys.forEach(k=>{
+    const o=document.createElement('option'); o.value=k; o.textContent=k; o.selected=true; agentsSel.appendChild(o);
+  });
+}
+loadAgents();
 
-  await loadAgents();
-  status('');
+function htmlEscape(s){return (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));}
 
-  document.getElementById('run').onclick = async () => {
-    status('Running…');
-
-    const tickers = document.getElementById('tickers').value
-      .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-
-    const agents = Array.from(agentsSel.selectedOptions).map(o => o.value);
-
-    const body = {
-      budget: Number(document.getElementById('budget').value || 0),
-      risk: document.getElementById('risk').value,
-      agents,
-      context: { note: "ui test" },
-      mode: "llm",
-      llm_model: document.getElementById('llm_model').value || "gpt-4o-mini"
-    };
-
-    // Your API accepts either symbol (single) or tickers (list)
-    if (tickers.length <= 1) body.symbol = tickers[0] || "AAPL";
-    else body.tickers = tickers;
-
-    try {
-      const r = await fetch('/agents/signal', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(body)
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(JSON.stringify(j));
-
-      const results = j.results || [];
-      const rows = results.map(res => {
-        const rats = (res.decisions || []).map(d =>
-          `<div><strong>${d.agent}:</strong> ${escapeHtml(d.rationale || '')}</div>`
-        ).join('');
-        return `<tr>
-          <td>${res.ticker}</td>
-          <td>${res.final_vote}</td>
-          <td>${Number(res.final_score || 0).toFixed(2)}</td>
-          <td>${rats}</td>
-        </tr>`;
-      }).join('');
-
-      document.getElementById('tbody').innerHTML = rows || '<tr><td colspan="4">No results</td></tr>';
-      document.getElementById('results').style.display = 'block';
-      status('');
-    } catch (e) {
-      status('Error: ' + String(e));
-    }
+$("btnConsensus").onclick = async ()=>{
+  statusEl.textContent='Running AI consensus…';
+  const tickers = $("tickers").value.split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+  const agents = Array.from(agentsSel.selectedOptions).map(o=>o.value);
+  const body = {
+    budget: Number($("budget").value||0),
+    risk: $("risk").value,
+    agents,
+    context: { note: "ui test" },
+    mode: "llm",
+    llm_model: "gpt-4o-mini"
   };
+  if(tickers.length<=1) body.symbol = tickers[0] || "AAPL"; else body.tickers = tickers;
 
-  function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));}
-})();
+  try{
+    const r=await fetch('/agents/signal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const j=await r.json();
+    if(!r.ok) throw new Error(JSON.stringify(j));
+    const rows=(j.results||[]).map(res=>{
+      const rats=(res.decisions||[]).map(d=>`<div><b>${htmlEscape(d.agent)}:</b> ${htmlEscape(d.rationale||'')}</div>`).join('');
+      return `<tr class="border-t">
+        <td class="p-2">${res.ticker}</td>
+        <td class="p-2 text-center"><span class="px-2 py-1 rounded-lg ${res.final_vote==='buy'?'bg-green-100 text-green-700':res.final_vote==='sell'?'bg-rose-100 text-rose-700':'bg-slate-100 text-slate-700'}">${res.final_vote}</span></td>
+        <td class="p-2 text-center">${Number(res.final_score||0).toFixed(2)}</td>
+        <td class="p-2 text-center">${Number(res.final_confidence||0).toFixed(2)}</td>
+        <td class="p-2">${rats}</td>
+      </tr>`;
+    }).join('');
+    $("consensusBody").innerHTML = rows || '<tr><td class="p-2" colspan="5">No results</td></tr>';
+    statusEl.textContent='';
+  }catch(e){ statusEl.textContent='Error: '+String(e); }
+};
+
+// Charts
+let priceChart, priceSeries, equityChart, equitySeries;
+function ensureCharts(){
+  if(!priceChart){
+    priceChart = LightweightCharts.createChart($("priceChart"), {height: $("priceChart").clientHeight, layout:{textColor:'#0f172a', background:{type:'solid', color:'#FFFFFF'}}, grid:{vertLines:{color:'#eef2ff'}, horzLines:{color:'#eef2ff'}}});
+    priceSeries = priceChart.addCandlestickSeries();
+  }
+  if(!equityChart){
+    equityChart = LightweightCharts.createChart($("equityChart"), {height: $("equityChart").clientHeight, layout:{textColor:'#0f172a', background:{type:'solid', color:'#FFFFFF'}}, grid:{vertLines:{color:'#eef2ff'}, horzLines:{color:'#eef2ff'}}});
+    equitySeries = equityChart.addLineSeries({priceFormat:{type:'price', precision:2, minMove:0.01}});
+  }
+}
+
+$("btnBacktest").onclick = async ()=>{
+  statusEl.textContent='Running SMA backtest…';
+  const symbol = ($("tickers").value.split(',')[0] || "AAPL").trim().toUpperCase();
+  const rng = $("range").value;
+  const fast = Number($("fast").value||20);
+  const slow = Number($("slow").value||50);
+
+  try{
+    // Prices for chart
+    const p = await (await fetch(`/market/prices?ticker=${symbol}&range=${encodeURIComponent(rng)}&interval=1d`)).json();
+    ensureCharts();
+    priceSeries.setData((p.bars||[]).map(b=>({ time: b.t/1000, open:b.o, high:b.h, low:b.l, close:b.c })));
+
+    // Backtest
+    const bt = await (await fetch('/backtest/sma',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbol, range:rng, fast, slow, initial_cash:10000})})).json();
+    equitySeries.setData((bt.equity||[]).map(e=>({ time: e.t/1000, value: e.equity })));
+
+    $("btSummary").textContent = `Final equity: $${Number(bt.final_equity||0).toLocaleString()} (start $${Number(bt.initial_cash||0).toLocaleString()})`;
+
+    $("tradesBody").innerHTML = (bt.trades||[]).map(tr=>{
+      const d=new Date(tr.t).toLocaleDateString();
+      return `<tr class="border-t"><td class="p-2">${d}</td><td class="p-2 text-center">${tr.side}</td><td class="p-2 text-right">$${Number(tr.price).toFixed(2)}</td><td class="p-2 text-right">${tr.shares}</td></tr>`;
+    }).join('') || '<tr><td class="p-2" colspan="4">No trades</td></tr>';
+
+    statusEl.textContent='';
+  }catch(e){ statusEl.textContent='Error: '+String(e); }
+};
 </script>
 </body>
 </html>
