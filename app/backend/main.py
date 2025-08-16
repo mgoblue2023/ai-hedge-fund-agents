@@ -3,6 +3,10 @@ from fastapi import FastAPI, APIRouter, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from app.backend.routers import market as market_router
+from app.backend.routers import backtest as backtest_router
+app.include_router(market_router.router)
+app.include_router(backtest_router.router)
 import os
 import logging
 import pkgutil
