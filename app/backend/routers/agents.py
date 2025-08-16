@@ -137,18 +137,38 @@ async def _run_one_agent(agent_name: str, ticker: str, req: SignalRequest) -> Di
         except Exception as e:
             return {"agent": agent_name, "action": "hold", "confidence": 0.5, "rationale": f"Agent error: {e}"}
 
-def _final_vote(decisions: List[Dict[str, Any]]) -> Dict[str, Any]:
-    # average mapped actions to a score in [-1, 1]
-    score = 0.0
-    for d in decisions:
-        score += VAL.get(d.get("action"), 0)
-    score /= max(1, len(decisions))
+# Keep VAL = {"buy": 1, "hold": 0, "sell": -1} above
 
-    # consensus decision
+# Optional persona weights (you can tweak or remove)
+WEIGHTS = {"buffett": 0.45, "munger": 0.35, "technicals": 0.20}
+
+def _final_vote(decisions: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Confidence- and persona-weighted consensus:
+    final_score in [-1, 1], where + is buy-lean and - is sell-lean.
+    """
+    # Build weighted sum
+    num = 0.0
+    den = 0.0
+    confs = []
+
+    for d in decisions:
+        agent = str(d.get("agent", "")).lower()
+        v = VAL.get(d.get("action"), 0)
+        c = float(d.get("confidence", 0.55))
+        w_agent = WEIGHTS.get(agent, 0.25)  # default small weight if unknown
+        w = max(0.05, min(1.0, c)) * w_agent  # combine persona weight & confidence
+        num += w * v
+        den += w
+        confs.append(c)
+
+    score = (num / den) if den > 0 else 0.0  # -1..1
+
+    # Thresholds for decision
     final_vote = "buy" if score > 0.15 else "sell" if score < -0.15 else "hold"
 
-    # combine agent confidences + agreement strength into a final_confidence
-    confs = [float(d.get("confidence", 0.5)) for d in decisions if d.get("confidence") is not None]
+    # Overall confidence: blend avg agent confidence with agreement strength
+    import statistics
     avg_conf = statistics.mean(confs) if confs else 0.55
     agreement = abs(score)  # 0..1
     final_confidence = max(0.05, min(0.95, 0.5 * avg_conf + 0.5 * agreement))
@@ -158,6 +178,7 @@ def _final_vote(decisions: List[Dict[str, Any]]) -> Dict[str, Any]:
         "final_score": round(score, 3),
         "final_confidence": round(final_confidence, 2),
     }
+
 
 # ----------------------- Routes -----------------------
 @router.post("/signal")
