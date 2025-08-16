@@ -1,4 +1,5 @@
 # app/backend/agents/llm_client.py
+import re, hashlib
 import os
 import httpx
 from typing import Optional, Dict, Any
@@ -42,12 +43,36 @@ def _extract_text(data: Dict[str, Any]) -> str:
 def _mock_reply(prompt: str) -> str:
     if "exactly: PONG" in prompt:
         return "PONG"
+
+    # Optional override via env: LLM_MOCK_MODE=buy|sell|hold|mix
+    mode = os.getenv("LLM_MOCK_MODE", "mix").lower()
+
+    # Extract persona and ticker from the prompt (best effort)
+    persona = "Agent"
+    m = re.search(r"You are the\s+(.+?)\s+agent", prompt, re.I)
+    if m:
+        persona = m.group(1).strip()
+
+    ticker = "TICKER"
+    m = re.search(r"Analyze\s+([A-Z][A-Z0-9.\-]*)", prompt)
+    if m:
+        ticker = m.group(1).upper()
+
+    if mode in ("buy", "sell", "hold"):
+        action = mode
+    else:
+        # Deterministic mix by persona+ticker so results are stable per request
+        seed = hashlib.md5(f"{persona}:{ticker}".encode()).digest()[0] % 3
+        action = ["buy", "hold", "sell"][seed]
+
+    conf = {"buy": 0.72, "hold": 0.55, "sell": 0.68}[action]
+
     return (
-        "Rationale: Mock analysis indicating neutral outlook over 1–3 months. "
-        "Valuation and momentum do not suggest a strong edge.\n"
-        "Final action: hold\n"
-        "Confidence: 0.55\n"
+        f"Rationale: Mock analysis for {ticker} by {persona}. Fundamentals and momentum considered.\n"
+        f"Final action: {action}\n"
+        f"Confidence: {conf}\n"
     )
+
 
 async def chat(prompt: str, model: Optional[str] = None, temperature: float = 0.2, timeout_s: float = 30.0) -> str:
     if MOCK:
