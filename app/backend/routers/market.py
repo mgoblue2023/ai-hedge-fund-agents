@@ -93,21 +93,32 @@ def _parse_stooq_csv(csv_text: str) -> List[Tuple[int, float, float, float, floa
     rows.sort(key=lambda x: x[0])
     return rows
 
+def _stooq_candidates(tkr: str) -> List[str]:
+    """
+    Stooq often needs the '.us' suffix for US symbols (e.g., aapl.us).
+    Try both plain lower and lower+'.us'.
+    """
+    t = (tkr or "").lower()
+    cands = [t]
+    if not t.endswith(".us"):
+        cands.append(f"{t}.us")
+    return cands
+
 async def _fetch_stooq_bars(ticker: str, rng: str) -> List[Dict[str, Any]]:
-    # Stooq expects lowercase symbol and uses "-" for some suffixes; start with plain lower.
-    sym = ticker.lower()
-    url = f"https://stooq.com/q/d/l/?s={sym}&i=d"
+    candidates = _stooq_candidates(ticker)
+    last_err = None
     async with httpx.AsyncClient(timeout=20.0) as client:
-        r = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
-    if r.status_code != 200:
-        raise HTTPException(502, f"Stooq error {r.status_code}: {r.text[:200]}")
-    rows = _parse_stooq_csv(r.text)
-    if not rows:
-        raise HTTPException(404, "Stooq returned no rows.")
-    lookback = _range_to_lookback_days(rng)
-    rows = rows[-lookback:]  # trim to range
-    bars = [{"t": t, "o": o, "h": h, "l": l, "c": c, "v": v} for (t, o, h, l, c, v) in rows]
-    return bars
+        for sym in candidates:
+            url = f"https://stooq.com/q/d/l/?s={sym}&i=d"
+            r = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+            if r.status_code == 200 and "Date,Open,High,Low,Close,Volume" in r.text:
+                rows = _parse_stooq_csv(r.text)
+                if rows:
+                    lookback = _range_to_lookback_days(rng)
+                    rows = rows[-lookback:]
+                    return [{"t": t, "o": o, "h": h, "l": l, "c": c, "v": v} for (t, o, h, l, c, v) in rows]
+            last_err = f"{r.status_code}: {r.text[:120]}"
+    raise HTTPException(404, f"Stooq returned no rows for {ticker} (tried {candidates}). Last: {last_err}")
 
 # ---------------------- Public endpoint ----------------------
 @router.get("/prices")
@@ -127,8 +138,9 @@ async def get_prices(
     if not tkr:
         raise HTTPException(422, "ticker is required")
 
-    errors = {}
+    errors: Dict[str, str] = {}
     bars: List[Dict[str, Any]] = []
+    src = None
 
     try:
         if source in ("auto", "yahoo"):
