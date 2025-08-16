@@ -1,16 +1,9 @@
 # app/backend/main.py
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from app.backend.routers import market as market_router
-from app.backend.routers import backtest as backtest_router
-app.include_router(market_router.router)
-app.include_router(backtest_router.router)
-import os
-import logging
-import pkgutil
-import importlib
+import os, logging, pkgutil, importlib
 
 app = FastAPI(title="AI Hedge Fund Agents", version="0.1.0")
 
@@ -32,16 +25,13 @@ def health():
 
 @app.get("/")
 def root():
-    # Visit /web for the simple UI
     return {"service": "ai-hedge-fund-agents", "ok": True, "ui": "/web"}
 
-# --- Try to include your existing routers (agents/web) ---
+# --- Try to include your existing agents/web routers (optional) ---
 try:
-    # Common: app/backend/routers/agents.py -> router = APIRouter(prefix="/agents")
     from app.backend.routers import agents as agents_router
     app.include_router(agents_router.router)
 except Exception as e1:
-    # Fallback: app/backend/agents/router.py -> router
     try:
         from app.backend.agents import router as agents_router2
         app.include_router(agents_router2.router)
@@ -52,13 +42,25 @@ try:
     from app.backend.routers import web as web_router
     app.include_router(web_router.router)
 except Exception as e:
-    # Optional; many repos won't have this
     logging.warning(f"Web router not loaded: {e}")
+
+# --- Include market/backtest routers (these are the new ones you added) ---
+try:
+    from app.backend.routers import market as market_router
+    app.include_router(market_router.router)
+except Exception as e:
+    logging.warning(f"Market router not loaded: {e}")
+
+try:
+    from app.backend.routers import backtest as backtest_router
+    app.include_router(backtest_router.router)
+except Exception as e:
+    logging.warning(f"Backtest router not loaded: {e}")
 
 # ======================= DEBUG ROUTES =======================
 _debug = APIRouter(prefix="/debug", tags=["debug"])
 
-# --- /debug/llm-ping (diagnostic, never 500s) ---
+# /debug/llm-ping
 try:
     from app.backend.agents.llm_client import chat as llm_chat
 except Exception as import_err:
@@ -95,7 +97,7 @@ else:
                 },
             )
 
-# --- /debug/agents-available (scan modules under app/backend/agents) ---
+# /debug/agents-available
 @_debug.get("/agents-available")
 def debug_agents_available():
     try:
@@ -107,18 +109,15 @@ def debug_agents_available():
     try:
         for m in pkgutil.iter_modules(agents_pkg.__path__):
             name = m.name
-            # hide internals/util files
             if name.startswith("_") or name in {"llm_client", "llm_helpers", "router", "generic"}:
                 continue
             names.append(name)
     except Exception as e:
         return {"ok": False, "error": f"ScanError: {e}", "agents_by_module": []}
-
     return {"ok": True, "agents_by_module": sorted(names)}
 
-# --- /debug/agents-registry (try to show the actual keys your endpoint uses) ---
+# /debug/agents-registry
 def _find_registry_keys():
-    # Check likely modules for a dict like AGENT_IMPLS / AGENT_MAP / AGENTS
     candidates = [
         "app.backend.routers.agents",
         "app.backend.agents.router",
@@ -127,7 +126,6 @@ def _find_registry_keys():
     ]
     possible_names = ["AGENT_IMPLS", "AGENT_MAP", "AGENTS", "AGENT_REGISTRY"]
     results = []
-
     for modpath in candidates:
         try:
             mod = importlib.import_module(modpath)
@@ -155,5 +153,4 @@ app.include_router(_debug)
 # ===================== END DEBUG ROUTES =====================
 
 # --- Static UI at /web ---
-# Put your HTML at repo-root/web/index.html (see instructions)
 app.mount("/web", StaticFiles(directory="web", html=True), name="web")
